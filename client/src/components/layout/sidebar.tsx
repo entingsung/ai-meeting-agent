@@ -71,23 +71,22 @@ export function Sidebar({ unreadNotifications }: SidebarProps) {
         <ul className="space-y-2">
           {navItems.map((item) => (
             <li key={item.href}>
-              <Link href={item.href}>
-                <a
-                  className={cn(
-                    "flex items-center px-4 py-2 rounded-md font-medium",
-                    item.active
-                      ? "text-primary bg-primary-50"
-                      : "text-gray-600 hover:bg-gray-100"
-                  )}
-                >
-                  <item.icon className="h-5 w-5 mr-3" />
-                  {item.label}
-                  {item.badge !== undefined && (
-                    <span className="ml-auto bg-primary text-white text-xs px-2 py-1 rounded-full">
-                      {item.badge}
-                    </span>
-                  )}
-                </a>
+              <Link 
+                href={item.href}
+                className={cn(
+                  "flex items-center px-4 py-2 rounded-md font-medium",
+                  item.active
+                    ? "text-primary bg-primary-50"
+                    : "text-gray-600 hover:bg-gray-100"
+                )}
+              >
+                <item.icon className="h-5 w-5 mr-3" />
+                {item.label}
+                {item.badge !== undefined && (
+                  <span className="ml-auto bg-primary text-white text-xs px-2 py-1 rounded-full">
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             </li>
           ))}

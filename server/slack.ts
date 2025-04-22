@@ -32,6 +32,7 @@ export async function sendActionItemToSlack(actionItem: ActionItem): Promise<str
     // Create slack message with action item details
     const response = await slack.chat.postMessage({
       channel: channelId,
+      text: `Action Item: ${actionItem.title} - Assigned to ${actionItem.assignee} - Due on ${formattedDueDate}`,
       blocks: [
         {
           type: "header",
@@ -101,6 +102,7 @@ export async function sendActionItemsToSlack(actionItems: ActionItem[]): Promise
     // First, send a header message
     await slack.chat.postMessage({
       channel: channelId,
+      text: `Action Items (${actionItems.length}) from your meeting`,
       blocks: [
         {
           type: "header",
@@ -145,6 +147,7 @@ export async function sendActionItemCompletedToSlack(actionItem: ActionItem): Pr
   try {
     await slack.chat.postMessage({
       channel: channelId,
+      text: `Action Item Completed: "${actionItem.title}" by ${actionItem.assignee}`,
       blocks: [
         {
           type: "section",

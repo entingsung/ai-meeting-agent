@@ -258,7 +258,14 @@ export async function checkSlackIntegration(): Promise<{ status: 'success' | 'er
  */
 export async function sendActionItemCompletedToSlack(actionItem: ActionItem): Promise<void> {
   try {
-    // Check if Slack is initialized
+    // If we're using mock Slack, log the completion and return
+    if (usingMockSlack) {
+      console.log("MOCK SLACK: Action item completed notification");
+      console.log(`MOCK SLACK: Title: "${actionItem.title}" completed by ${actionItem.assignee}`);
+      return;
+    }
+    
+    // Real Slack implementation
     if (!slack || !channelId) {
       const errorMessage = "Slack integration is not configured. Please set SLACK_BOT_TOKEN and SLACK_CHANNEL_ID environment variables.";
       console.error(errorMessage);

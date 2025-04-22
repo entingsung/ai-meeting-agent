@@ -4,11 +4,16 @@ import { storage } from "./storage";
 import { 
   extractionRequestSchema, 
   insertDecisionSchema, 
-  insertActionItemSchema 
+  insertActionItemSchema,
+  recordingSchema
 } from "@shared/schema";
-import { extractDecisionsAndActionItems } from "./openai";
+import { extractDecisionsAndActionItems, transcribeAudio } from "./openai";
 import { scheduleActionItemReminder, cancelActionItemReminder, initializeScheduler } from "./scheduler";
 import { ZodError } from "zod";
+import { v4 as uuidv4 } from "uuid";
+import path from "path";
+import fs from "fs";
+import { UploadedFile } from "express-fileupload";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize the scheduler
@@ -220,6 +225,148 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch statistics" });
+    }
+  });
+  
+  // Recording routes
+  app.post('/api/recordings/upload', async (req: Request, res: Response) => {
+    try {
+      if (!req.files || Object.keys(req.files).length === 0) {
+        return res.status(400).json({ message: 'No audio file uploaded' });
+      }
+      
+      const audioFile = req.files.audio as UploadedFile;
+      const allowedMimeTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-m4a', 'audio/webm'];
+      
+      if (!allowedMimeTypes.includes(audioFile.mimetype)) {
+        return res.status(400).json({ 
+          message: 'Invalid file type. Please upload an audio file (MP3, WAV, M4A, or WebM)'
+        });
+      }
+      
+      // Generate a unique ID for the recording
+      const recordingId = uuidv4();
+      const fileExt = path.extname(audioFile.name);
+      const fileName = `${recordingId}${fileExt}`;
+      const uploadPath = path.join(process.cwd(), 'uploads', fileName);
+      
+      // Move the file to the uploads directory
+      await audioFile.mv(uploadPath);
+      
+      // Create a new recording entry
+      const recording = await storage.createRecording({
+        id: recordingId,
+        title: req.body.title || audioFile.name,
+        status: "pending",
+        createdAt: new Date()
+      });
+      
+      // Start transcription process in the background
+      transcribeAudio(uploadPath, recordingId).catch(err => {
+        console.error('Error during transcription:', err);
+      });
+      
+      res.status(201).json({
+        message: 'Audio file uploaded successfully and being processed',
+        recording
+      });
+    } catch (error) {
+      console.error('Error uploading audio:', error);
+      res.status(500).json({ message: 'Failed to upload audio file' });
+    }
+  });
+  
+  app.get('/api/recordings', async (req: Request, res: Response) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const recordings = await storage.listRecordings(limit);
+      res.json(recordings);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to fetch recordings' });
+    }
+  });
+  
+  app.get('/api/recordings/:id', async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id;
+      const recording = await storage.getRecording(id);
+      
+      if (!recording) {
+        return res.status(404).json({ message: 'Recording not found' });
+      }
+      
+      res.json(recording);
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to fetch recording details' });
+    }
+  });
+  
+  app.post('/api/recordings/:id/extract', async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id;
+      const { source, team } = extractionRequestSchema.parse(req.body);
+      
+      const recording = await storage.getRecording(id);
+      
+      if (!recording) {
+        return res.status(404).json({ message: 'Recording not found' });
+      }
+      
+      if (recording.status !== 'completed') {
+        return res.status(400).json({ 
+          message: 'Recording is not ready for extraction. Current status: ' + recording.status 
+        });
+      }
+      
+      if (!recording.transcription) {
+        return res.status(400).json({ message: 'Recording does not have a transcription' });
+      }
+      
+      // Use the transcription to extract decisions and action items
+      const extractionResult = await extractDecisionsAndActionItems(recording.transcription, source, team);
+      
+      // Create a decision record
+      const decision = await storage.createDecision({
+        title: extractionResult.decision.title,
+        description: extractionResult.decision.description,
+        source,
+        team
+      });
+      
+      // Create action items
+      const actionItems = await Promise.all(
+        extractionResult.actionItems.map(item => {
+          const dueDate = new Date(item.dueDate);
+          
+          return storage.createActionItem({
+            title: item.title,
+            decisionId: decision.id,
+            assignee: item.assignee,
+            dueDate,
+            priority: item.priority
+          }).then(actionItem => {
+            // Schedule reminder for this action item
+            scheduleActionItemReminder(actionItem.id, dueDate);
+            return actionItem;
+          });
+        })
+      );
+      
+      res.status(201).json({
+        decision,
+        actionItems
+      });
+    } catch (error) {
+      console.error('Error extracting from recording:', error);
+      
+      if (error instanceof ZodError) {
+        return res.status(400).json({ 
+          message: 'Invalid request data', 
+          errors: error.errors 
+        });
+      }
+      
+      res.status(500).json({ message: error.message || 'Failed to extract from recording' });
     }
   });
 

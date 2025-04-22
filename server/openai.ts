@@ -2,9 +2,59 @@ import OpenAI from "openai";
 import { AIExtractResponse, aiExtractResponseSchema, Recording } from "@shared/schema";
 import fs from "fs";
 import { storage } from "./storage";
+import path from "path";
 
 // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "sk-" });
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+/**
+ * Transcribes an audio file using OpenAI's Whisper model
+ * @param filePath Path to the audio file to transcribe
+ * @param recordingId ID of the recording in the database
+ * @returns The transcription text
+ */
+export async function transcribeAudio(filePath: string, recordingId: string): Promise<string> {
+  try {
+    // Update recording status
+    await storage.updateRecording(recordingId, { 
+      status: "transcribing" 
+    });
+
+    // Read the file as a stream
+    const fileStream = fs.createReadStream(filePath);
+
+    // Transcribe using OpenAI's Whisper model
+    const transcription = await openai.audio.transcriptions.create({
+      file: fileStream,
+      model: "whisper-1",
+      language: "en",
+      response_format: "text"
+    });
+
+    // Update recording with transcription
+    await storage.updateRecording(recordingId, {
+      transcription: transcription,
+      status: "completed"
+    });
+
+    return transcription;
+  } catch (error) {
+    console.error("Error transcribing audio:", error);
+    
+    // Update recording status to failed
+    await storage.updateRecording(recordingId, { 
+      status: "failed" 
+    });
+    
+    throw new Error("Failed to transcribe audio. Please try again.");
+  }
+}
 
 export async function extractDecisionsAndActionItems(text: string, source: string, team?: string): Promise<AIExtractResponse> {
   try {

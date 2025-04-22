@@ -9,6 +9,7 @@ import Dashboard from "@/pages/dashboard";
 import Decisions from "@/pages/decisions";
 import ActionItems from "@/pages/action-items";
 import Notifications from "@/pages/notifications";
+import Recordings from "@/pages/recordings";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { MobileNav } from "@/components/layout/mobile-nav";

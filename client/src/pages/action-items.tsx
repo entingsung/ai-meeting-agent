@@ -18,6 +18,9 @@ export default function ActionItems() {
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [assigneeFilter, setAssigneeFilter] = useState("all");
   const [statusTab, setStatusTab] = useState("all");
+  const [selectedItems, setSelectedItems] = useState<number[]>([]);
+  const [isSendingToSlack, setIsSendingToSlack] = useState(false);
+  const { toast } = useToast();
 
   // Fetch action items
   const { data: actionItems, isLoading } = useQuery({
@@ -81,11 +84,77 @@ export default function ActionItems() {
     ).length || 0,
   };
 
+  // Add handler for selecting items
+  const toggleSelectItem = (id: number) => {
+    setSelectedItems(prev => 
+      prev.includes(id) 
+        ? prev.filter(itemId => itemId !== id) 
+        : [...prev, id]
+    );
+  };
+  
+  // Handler for selecting all visible items
+  const toggleSelectAll = () => {
+    if (selectedItems.length === filteredActionItems.length) {
+      // If all are selected, unselect all
+      setSelectedItems([]);
+    } else {
+      // Otherwise, select all visible items
+      setSelectedItems(filteredActionItems.map((item: ActionItem) => item.id));
+    }
+  };
+  
+  // Send selected items to Slack
+  const sendSelectedToSlack = async () => {
+    if (selectedItems.length === 0) {
+      toast({
+        title: "No items selected",
+        description: "Please select at least one action item to send to Slack.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsSendingToSlack(true);
+    
+    try {
+      await apiRequest("POST", "/api/action-items/send-to-slack", {
+        actionItemIds: selectedItems
+      });
+      
+      toast({
+        title: "Success!",
+        description: `${selectedItems.length} action item(s) sent to Slack.`,
+      });
+      
+      // Clear selection after successful send
+      setSelectedItems([]);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send action items to Slack. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingToSlack(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Action Items</h1>
-        <div className="mt-3 md:mt-0">
+        <div className="mt-3 md:mt-0 flex space-x-3">
+          {selectedItems.length > 0 && (
+            <Button 
+              variant="outline"
+              onClick={sendSelectedToSlack}
+              disabled={isSendingToSlack}
+            >
+              <Send className="h-4 w-4 mr-2" />
+              {isSendingToSlack ? 'Sending...' : `Send ${selectedItems.length} to Slack`}
+            </Button>
+          )}
           <Button onClick={() => setIsExtractModalOpen(true)}>
             Extract New Decision
           </Button>
@@ -161,16 +230,38 @@ export default function ActionItems() {
       {/* Action Items List */}
       <div className="bg-white shadow rounded-lg overflow-hidden">
         <div className="px-4 py-5 border-b border-gray-200 sm:px-6 flex justify-between items-center">
-          <h3 className="text-lg font-medium text-gray-900">
-            {statusTab === "all" && "All Action Items"}
-            {statusTab === "pending" && "Pending Action Items"}
-            {statusTab === "completed" && "Completed Action Items"}
-            {statusTab === "overdue" && "Overdue Action Items"}
-          </h3>
-          <Button size="sm" variant="outline">
-            <CalendarIcon className="h-4 w-4 mr-2" />
-            Calendar View
-          </Button>
+          <div className="flex items-center space-x-3">
+            {filteredActionItems.length > 0 && (
+              <Checkbox 
+                checked={selectedItems.length === filteredActionItems.length && filteredActionItems.length > 0} 
+                onCheckedChange={toggleSelectAll}
+                id="select-all"
+              />
+            )}
+            <h3 className="text-lg font-medium text-gray-900">
+              {statusTab === "all" && "All Action Items"}
+              {statusTab === "pending" && "Pending Action Items"}
+              {statusTab === "completed" && "Completed Action Items"}
+              {statusTab === "overdue" && "Overdue Action Items"}
+            </h3>
+          </div>
+          <div className="flex items-center space-x-2">
+            {selectedItems.length > 0 && (
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={sendSelectedToSlack}
+                disabled={isSendingToSlack}
+              >
+                <Send className="h-4 w-4 mr-2" />
+                {isSendingToSlack ? 'Sending...' : 'Send to Slack'}
+              </Button>
+            )}
+            <Button size="sm" variant="outline">
+              <CalendarIcon className="h-4 w-4 mr-2" />
+              Calendar View
+            </Button>
+          </div>
         </div>
         
         <div className="divide-y divide-gray-200">
@@ -178,11 +269,21 @@ export default function ActionItems() {
             <div className="p-6 text-center text-gray-500">Loading action items...</div>
           ) : filteredActionItems.length > 0 ? (
             filteredActionItems.map((item: ActionItem) => (
-              <ActionItemCard 
-                key={item.id}
-                item={item}
-                onComplete={handleActionItemComplete}
-              />
+              <div key={item.id} className="flex items-center">
+                <div className="pl-4 pr-2 py-4">
+                  <Checkbox 
+                    checked={selectedItems.includes(item.id)} 
+                    onCheckedChange={() => toggleSelectItem(item.id)}
+                    id={`item-${item.id}`}
+                  />
+                </div>
+                <div className="flex-1">
+                  <ActionItemCard 
+                    item={item}
+                    onComplete={handleActionItemComplete}
+                  />
+                </div>
+              </div>
             ))
           ) : (
             <div className="p-6 text-center text-gray-500">

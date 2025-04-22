@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MoreVertical, Calendar, Users, AlertCircle } from "lucide-react";
+import { MoreVertical, Calendar, Users, AlertCircle, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ActionItem } from "@shared/schema";
@@ -7,6 +7,13 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format, isAfter, parseISO } from "date-fns";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface ActionItemProps {
   item: ActionItem;
@@ -15,6 +22,7 @@ interface ActionItemProps {
 
 export function ActionItemCard({ item, onComplete }: ActionItemProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isSendingToSlack, setIsSendingToSlack] = useState(false);
   const { toast } = useToast();
   
   const handleCheckboxChange = async (checked: boolean) => {
@@ -81,6 +89,28 @@ export function ActionItemCard({ item, onComplete }: ActionItemProps) {
         return <Badge variant="gray">{item.priority}</Badge>;
     }
   };
+  
+  // Send this action item to Slack
+  const sendToSlack = async () => {
+    setIsSendingToSlack(true);
+    
+    try {
+      await apiRequest("POST", `/api/action-items/${item.id}/send-to-slack`, {});
+      
+      toast({
+        title: "Success!",
+        description: "Action item sent to Slack.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send action item to Slack. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingToSlack(false);
+    }
+  };
 
   return (
     <div className="px-4 py-4 sm:px-6 hover:bg-gray-50">
@@ -121,9 +151,23 @@ export function ActionItemCard({ item, onComplete }: ActionItemProps) {
           </div>
         </div>
         <div className="ml-2 flex-shrink-0 flex">
-          <button className="p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none">
-            <MoreVertical className="h-5 w-5" />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none">
+                <MoreVertical className="h-5 w-5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem 
+                onClick={sendToSlack}
+                disabled={isSendingToSlack}
+                className="cursor-pointer"
+              >
+                <Send className="h-4 w-4 mr-2" />
+                {isSendingToSlack ? "Sending..." : "Send to Slack"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>

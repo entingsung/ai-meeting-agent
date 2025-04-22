@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Mic, CheckCircle, XCircle, Clock, Play, Headphones } from "lucide-react";
+import { Loader2, Mic, CheckCircle, XCircle, Clock, Play, Headphones, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { ExtractModal } from "@/components/modals/extract-modal";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -22,6 +24,14 @@ export default function Recordings() {
   const [extractModalOpen, setExtractModalOpen] = useState(false);
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(null);
+  const [isLiveRecordingModalOpen, setIsLiveRecordingModalOpen] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTitle, setRecordingTitle] = useState('');
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
+  const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const timerRef = useRef<number | null>(null);
   const { toast } = useToast();
 
   const { data: recordings, isLoading, error, refetch } = useQuery({
@@ -101,6 +111,108 @@ export default function Recordings() {
     const remainingSeconds = Math.floor(seconds % 60);
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
+  
+  const startLiveRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setAudioStream(stream);
+      
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      
+      // Clear any previous audio chunks
+      setAudioChunks([]);
+      
+      // Start recording
+      mediaRecorder.start();
+      setIsRecording(true);
+      
+      // Update recording time
+      timerRef.current = window.setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+      
+      // Collect audio chunks
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          setAudioChunks(prev => [...prev, event.data]);
+        }
+      };
+      
+      toast({
+        title: "Recording Started",
+        description: "Meeting is now being recorded in real-time",
+      });
+      
+    } catch (error) {
+      toast({
+        title: "Recording Failed",
+        description: "Could not access microphone. Please check permissions.",
+        variant: "destructive",
+      });
+      console.error("Error starting recording:", error);
+    }
+  };
+  
+  const stopLiveRecording = async () => {
+    if (!mediaRecorderRef.current || !audioStream) return;
+    
+    // Stop the recorder
+    mediaRecorderRef.current.stop();
+    
+    // Stop all audio tracks
+    audioStream.getAudioTracks().forEach(track => track.stop());
+    setAudioStream(null);
+    
+    // Clear the timer
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    
+    setIsRecording(false);
+    
+    // Create a blob from the recorded chunks
+    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+    
+    // Create a FormData object to send to server
+    const formData = new FormData();
+    formData.append('audio', audioBlob, `${recordingTitle || 'Live Recording'}.webm`);
+    formData.append('title', recordingTitle || 'Live Recording');
+    
+    try {
+      // Upload the recording
+      const response = await fetch('/api/recordings/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to upload recording');
+      }
+      
+      // Refresh the recordings list
+      refetch();
+      
+      toast({
+        title: "Recording Saved",
+        description: "Your meeting recording has been saved and is being processed",
+      });
+      
+      // Reset recording title and time
+      setRecordingTitle('');
+      setRecordingTime(0);
+      setIsLiveRecordingModalOpen(false);
+      
+    } catch (error) {
+      toast({
+        title: "Upload Failed",
+        description: "Could not save the recording. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Error uploading recording:", error);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -111,10 +223,16 @@ export default function Recordings() {
             Upload and transcribe meeting recordings to extract decisions and action items
           </p>
         </div>
-        <Button onClick={() => setExtractModalOpen(true)}>
-          <Mic className="mr-2 h-4 w-4" />
-          Upload Recording
-        </Button>
+        <div className="flex space-x-3">
+          <Button variant="outline" onClick={() => setIsLiveRecordingModalOpen(true)}>
+            <Radio className="mr-2 h-4 w-4 text-red-500" />
+            Record in Real Time
+          </Button>
+          <Button onClick={() => setExtractModalOpen(true)}>
+            <Mic className="mr-2 h-4 w-4" />
+            Upload Recording
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -204,6 +322,85 @@ export default function Recordings() {
         open={extractModalOpen} 
         onOpenChange={setExtractModalOpen} 
       />
+      
+      {/* Live Recording Dialog */}
+      <Dialog open={isLiveRecordingModalOpen} onOpenChange={setIsLiveRecordingModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {isRecording ? "Recording in Progress" : "Record Meeting in Real-Time"}
+            </DialogTitle>
+            <DialogDescription>
+              {isRecording 
+                ? "Your meeting is being recorded. You can stop the recording at any time." 
+                : "Start recording your meeting in real-time to capture decisions and action items."}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {!isRecording && (
+            <div className="grid gap-4 py-4">
+              <div className="flex flex-col gap-2">
+                <label htmlFor="recording-title" className="text-sm font-medium">
+                  Meeting Title
+                </label>
+                <Input
+                  id="recording-title"
+                  placeholder="Weekly Team Sync"
+                  value={recordingTitle}
+                  onChange={(e) => setRecordingTitle(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+          
+          {isRecording && (
+            <div className="py-6 flex flex-col items-center justify-center">
+              <div className="flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+                <Radio className="h-8 w-8 text-red-600 animate-pulse" />
+              </div>
+              
+              <p className="text-2xl font-mono mb-2">
+                {formatDuration(recordingTime)}
+              </p>
+              
+              <p className="text-sm text-muted-foreground">
+                Recording in progress...
+              </p>
+            </div>
+          )}
+          
+          <DialogFooter className="sm:justify-between">
+            {isRecording ? (
+              <>
+                <div className="text-sm text-muted-foreground">
+                  Microphone active
+                </div>
+                <Button 
+                  variant="destructive" 
+                  onClick={stopLiveRecording}
+                >
+                  Stop Recording
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsLiveRecordingModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="default" 
+                  onClick={startLiveRecording}
+                >
+                  Start Recording
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

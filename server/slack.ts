@@ -2,16 +2,23 @@ import { WebClient } from "@slack/web-api";
 import { ActionItem } from "@shared/schema";
 
 // Initialize Slack client with bot token
-if (!process.env.SLACK_BOT_TOKEN) {
-  throw new Error("SLACK_BOT_TOKEN environment variable must be set");
-}
+let slack: WebClient;
+let channelId: string;
 
-if (!process.env.SLACK_CHANNEL_ID) {
-  throw new Error("SLACK_CHANNEL_ID environment variable must be set");
+try {
+  if (!process.env.SLACK_BOT_TOKEN) {
+    console.warn("SLACK_BOT_TOKEN environment variable is not set. Slack integration will be disabled.");
+  } else if (!process.env.SLACK_CHANNEL_ID) {
+    console.warn("SLACK_CHANNEL_ID environment variable is not set. Slack integration will be disabled.");
+  } else {
+    // Only initialize the Slack client if both token and channel ID are available
+    slack = new WebClient(process.env.SLACK_BOT_TOKEN);
+    channelId = process.env.SLACK_CHANNEL_ID;
+    console.log("Slack integration initialized successfully.");
+  }
+} catch (error) {
+  console.error("Failed to initialize Slack client:", error);
 }
-
-const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
-const channelId = process.env.SLACK_CHANNEL_ID;
 
 /**
  * Send an action item to Slack
@@ -20,6 +27,13 @@ const channelId = process.env.SLACK_CHANNEL_ID;
  */
 export async function sendActionItemToSlack(actionItem: ActionItem): Promise<string | undefined> {
   try {
+    // Check if Slack is initialized
+    if (!slack || !channelId) {
+      const errorMessage = "Slack integration is not configured. Please set SLACK_BOT_TOKEN and SLACK_CHANNEL_ID environment variables.";
+      console.error(errorMessage);
+      throw new Error(errorMessage);
+    }
+    
     // Format due date
     const dueDate = new Date(actionItem.dueDate);
     const formattedDueDate = dueDate.toLocaleDateString('en-US', {
@@ -99,6 +113,13 @@ export async function sendActionItemToSlack(actionItem: ActionItem): Promise<str
  */
 export async function sendActionItemsToSlack(actionItems: ActionItem[]): Promise<void> {
   try {
+    // Check if Slack is initialized
+    if (!slack || !channelId) {
+      const errorMessage = "Slack integration is not configured. Please set SLACK_BOT_TOKEN and SLACK_CHANNEL_ID environment variables.";
+      console.error(errorMessage);
+      throw new Error(errorMessage);
+    }
+    
     // First, send a header message
     await slack.chat.postMessage({
       channel: channelId,
@@ -139,12 +160,65 @@ export async function sendActionItemsToSlack(actionItems: ActionItem[]): Promise
 }
 
 /**
+ * Check if Slack integration is properly configured and working
+ * @returns Promise resolving to an object with the status and message
+ */
+export async function checkSlackIntegration(): Promise<{ status: 'success' | 'error', message: string }> {
+  try {
+    // Check if Slack is initialized
+    if (!slack || !channelId) {
+      return { 
+        status: 'error', 
+        message: "Slack integration is not configured. Please set SLACK_BOT_TOKEN and SLACK_CHANNEL_ID environment variables."
+      };
+    }
+    
+    // Try to get info about the bot to verify the token is valid
+    const authInfo = await slack.auth.test();
+    
+    if (!authInfo.ok) {
+      return { 
+        status: 'error', 
+        message: `Slack integration test failed: ${authInfo.error || 'Unknown error'}`
+      };
+    }
+    
+    // Now try to verify the channel exists and the bot has access to it
+    try {
+      const channelInfo = await slack.conversations.info({ channel: channelId });
+      return { 
+        status: 'success', 
+        message: `Slack integration is working correctly. Connected as ${authInfo.user} to channel ${channelInfo.channel?.name || channelId}.`
+      };
+    } catch (channelError) {
+      // If we get here, the token is valid but the channel is not accessible
+      return { 
+        status: 'error', 
+        message: `Slack token is valid, but the channel ${channelId} is not accessible. Error: ${channelError.data?.error || 'Unknown error'}`
+      };
+    }
+  } catch (error) {
+    return { 
+      status: 'error', 
+      message: `Slack integration error: ${error.message || 'Unknown error'}`
+    };
+  }
+}
+
+/**
  * Send a notification to Slack when an action item is completed
  * @param actionItem The completed action item
  * @returns Promise resolving to void
  */
 export async function sendActionItemCompletedToSlack(actionItem: ActionItem): Promise<void> {
   try {
+    // Check if Slack is initialized
+    if (!slack || !channelId) {
+      const errorMessage = "Slack integration is not configured. Please set SLACK_BOT_TOKEN and SLACK_CHANNEL_ID environment variables.";
+      console.error(errorMessage);
+      throw new Error(errorMessage);
+    }
+    
     await slack.chat.postMessage({
       channel: channelId,
       text: `Action Item Completed: "${actionItem.title}" by ${actionItem.assignee}`,

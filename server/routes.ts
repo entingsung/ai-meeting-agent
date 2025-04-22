@@ -274,6 +274,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Check Slack integration status
+  app.get('/api/slack/status', async (req: Request, res: Response) => {
+    try {
+      const status = await checkSlackIntegration();
+      res.json(status);
+    } catch (error) {
+      console.error("Error checking Slack integration:", error);
+      res.status(500).json({ 
+        status: 'error',
+        message: `Failed to check Slack integration: ${error.message || 'Unknown error'}`
+      });
+    }
+  });
+  
   app.post('/api/decisions/:id/send-action-items-to-slack', async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
@@ -299,6 +313,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Error sending to Slack:", error);
+      
+      // Check for specific Slack API errors
+      if (error.code === 'slack_webapi_platform_error') {
+        if (error.data?.error === 'not_allowed_token_type') {
+          return res.status(401).json({ 
+            message: "Invalid Slack token type. Please provide a valid bot token with chat:write permission.",
+            error: "not_allowed_token_type"
+          });
+        } else if (error.data?.error === 'channel_not_found') {
+          return res.status(404).json({ 
+            message: "Slack channel not found. Please check your SLACK_CHANNEL_ID.",
+            error: "channel_not_found"
+          });
+        } else if (error.data?.error) {
+          return res.status(400).json({ 
+            message: `Slack API error: ${error.data.error}`,
+            error: error.data.error
+          });
+        }
+      }
+      
       res.status(500).json({ message: "Failed to send action items to Slack" });
     }
   });

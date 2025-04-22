@@ -9,7 +9,7 @@ import {
 } from "@shared/schema";
 import { extractDecisionsAndActionItems, transcribeAudio } from "./openai";
 import { scheduleActionItemReminder, cancelActionItemReminder, initializeScheduler } from "./scheduler";
-import { sendActionItemToSlack, sendActionItemsToSlack, sendActionItemCompletedToSlack } from "./slack";
+import { sendActionItemToSlack, sendActionItemsToSlack, sendActionItemCompletedToSlack, checkSlackIntegration } from "./slack";
 import { ZodError } from "zod";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";

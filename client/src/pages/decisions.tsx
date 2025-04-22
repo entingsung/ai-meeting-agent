@@ -58,7 +58,7 @@ export default function Decisions() {
         <h1 className="text-2xl font-semibold text-gray-900">Decisions</h1>
         <div className="mt-3 md:mt-0">
           <Button onClick={() => setIsExtractModalOpen(true)}>
-            Extract New Decision
+            Import Data
           </Button>
         </div>
       </div>
@@ -130,7 +130,7 @@ export default function Decisions() {
             <div className="p-6 text-center text-gray-500">
               {searchQuery || teamFilter !== "all" || sourceFilter !== "all" ? 
                 "No decisions found matching your filters." : 
-                "No decisions found. Extract your first decision using the button above."}
+                "No decisions found. Import your first data using the button above."}
             </div>
           )}
         </div>

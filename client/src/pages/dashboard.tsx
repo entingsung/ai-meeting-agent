@@ -81,12 +81,9 @@ export default function Dashboard() {
     <div className="max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-        <div className="mt-3 md:mt-0 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
-          <Button variant="outline">
-            Import Data
-          </Button>
+        <div className="mt-3 md:mt-0">
           <Button onClick={() => setIsExtractModalOpen(true)}>
-            Extract New Decision
+            Import Data
           </Button>
         </div>
       </div>
@@ -247,7 +244,7 @@ export default function Dashboard() {
               ))
             ) : (
               <div className="p-4 text-center text-gray-500">
-                No decisions found. Extract your first decision using the button above.
+                No decisions found. Import your first data using the button above.
               </div>
             )}
           </div>

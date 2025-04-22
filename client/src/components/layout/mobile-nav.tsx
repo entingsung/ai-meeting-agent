@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, FileText, ClipboardList, Bell } from "lucide-react";
+import { LayoutDashboard, FileText, ClipboardList, Bell, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MobileNavProps {
@@ -15,6 +15,12 @@ export function MobileNav({ unreadNotifications }: MobileNavProps) {
       href: "/",
       icon: LayoutDashboard,
       active: location === "/"
+    },
+    {
+      label: "Record",
+      href: "/recordings",
+      icon: Mic,
+      active: location === "/recordings"
     },
     {
       label: "Decisions",

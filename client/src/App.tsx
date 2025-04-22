@@ -89,6 +89,13 @@ function App() {
               </AppLayout>
             )}
           </Route>
+          <Route path="/recordings">
+            {() => (
+              <AppLayout>
+                <Recordings />
+              </AppLayout>
+            )}
+          </Route>
           <Route path="/notifications">
             {() => (
               <AppLayout>

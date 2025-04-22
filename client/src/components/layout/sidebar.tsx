@@ -5,7 +5,8 @@ import {
   ClipboardList, 
   Bell, 
   Settings,
-  Check
+  Check,
+  Mic
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,12 @@ export function Sidebar({ unreadNotifications }: SidebarProps) {
       href: "/",
       icon: LayoutDashboard,
       active: location === "/"
+    },
+    {
+      label: "Recordings",
+      href: "/recordings",
+      icon: Mic,
+      active: location === "/recordings"
     },
     {
       label: "Decisions",

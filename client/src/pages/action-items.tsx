@@ -5,10 +5,12 @@ import { ActionItemCard } from "@/components/dashboard/action-item";
 import { ExtractModal } from "@/components/modals/extract-modal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ActionItem } from "@shared/schema";
-import { SearchIcon, Filter, CalendarIcon } from "lucide-react";
+import { SearchIcon, Filter, CalendarIcon, Send, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function ActionItems() {
   const [isExtractModalOpen, setIsExtractModalOpen] = useState(false);

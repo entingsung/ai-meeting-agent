@@ -9,6 +9,7 @@ import {
 } from "@shared/schema";
 import { extractDecisionsAndActionItems, transcribeAudio } from "./openai";
 import { scheduleActionItemReminder, cancelActionItemReminder, initializeScheduler } from "./scheduler";
+import { sendActionItemToSlack, sendActionItemsToSlack, sendActionItemCompletedToSlack } from "./slack";
 import { ZodError } from "zod";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
@@ -169,6 +170,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedItem);
     } catch (error) {
       res.status(500).json({ message: "Failed to mark action item as not completed" });
+    }
+  });
+  
+  // Slack integration routes
+  app.post('/api/action-items/:id/send-to-slack', async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const actionItem = await storage.getActionItem(id);
+      
+      if (!actionItem) {
+        return res.status(404).json({ message: "Action item not found" });
+      }
+      
+      // Send the action item to Slack
+      const messageTs = await sendActionItemToSlack(actionItem);
+      
+      res.json({ 
+        success: true, 
+        messageTs,
+        message: "Action item sent to Slack successfully" 
+      });
+    } catch (error) {
+      console.error("Error sending to Slack:", error);
+      res.status(500).json({ message: "Failed to send action item to Slack" });
+    }
+  });
+  
+  app.post('/api/action-items/send-to-slack', async (req: Request, res: Response) => {
+    try {
+      // Get IDs of action items to send
+      const { actionItemIds } = req.body;
+      
+      if (!actionItemIds || !Array.isArray(actionItemIds) || actionItemIds.length === 0) {
+        return res.status(400).json({ message: "Action item IDs are required" });
+      }
+      
+      // Get all the action items
+      const actionItems = [];
+      for (const id of actionItemIds) {
+        const actionItem = await storage.getActionItem(parseInt(id));
+        if (actionItem) {
+          actionItems.push(actionItem);
+        }
+      }
+      
+      if (actionItems.length === 0) {
+        return res.status(404).json({ message: "No valid action items found" });
+      }
+      
+      // Send all action items to Slack
+      await sendActionItemsToSlack(actionItems);
+      
+      res.json({ 
+        success: true, 
+        message: `${actionItems.length} action items sent to Slack successfully` 
+      });
+    } catch (error) {
+      console.error("Error sending to Slack:", error);
+      res.status(500).json({ message: "Failed to send action items to Slack" });
+    }
+  });
+  
+  app.post('/api/decisions/:id/send-action-items-to-slack', async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const decision = await storage.getDecision(id);
+      
+      if (!decision) {
+        return res.status(404).json({ message: "Decision not found" });
+      }
+      
+      // Get action items for this decision
+      const actionItems = await storage.listActionItems({ decisionId: id });
+      
+      if (actionItems.length === 0) {
+        return res.status(404).json({ message: "No action items found for this decision" });
+      }
+      
+      // Send all action items to Slack
+      await sendActionItemsToSlack(actionItems);
+      
+      res.json({ 
+        success: true, 
+        message: `${actionItems.length} action items from decision "${decision.title}" sent to Slack` 
+      });
+    } catch (error) {
+      console.error("Error sending to Slack:", error);
+      res.status(500).json({ message: "Failed to send action items to Slack" });
     }
   });
   
